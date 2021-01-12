@@ -160,8 +160,7 @@ int bitXor(int x, int y)
  */
 int tmin(void)
 {
-
-  return 2;
+  return 1 << 31;
 }
 //2
 /*
@@ -173,7 +172,10 @@ int tmin(void)
  */
 int isTmax(int x)
 {
-  return 2;
+  int z = ~x;
+  int a = (x + 1) ^ z;
+  int b = !z;
+  return !(a | b);
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -185,7 +187,9 @@ int isTmax(int x)
  */
 int allOddBits(int x)
 {
-  return 2;
+  int neg_x = ~(x & 0xAAAAAAAA); // use 0xAAAAAAAA is kind of cheat which can be fixed use >> to make one
+  int y = neg_x & (neg_x >> 1);
+  return !y;
 }
 /* 
  * negate - return -x 
@@ -196,7 +200,7 @@ int allOddBits(int x)
  */
 int negate(int x)
 {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -210,7 +214,9 @@ int negate(int x)
  */
 int isAsciiDigit(int x)
 {
-  return 2;
+  int a = x + ~(0x30) + 1; // x - 0x35
+  int b = 0x39 + (~x) + 1; // 0x39 - x
+  return !((a >> 31) | (b >> 31));
 }
 /* 
  * conditional - same as x ? y : z 
@@ -221,7 +227,11 @@ int isAsciiDigit(int x)
  */
 int conditional(int x, int y, int z)
 {
-  return 2;
+  int a = !x + (~1 + 1); // x == 0, a = 0x0;  x != 0, a = 0xF
+  int b = ~a;
+  int c = (y ^ b) & y; // x == 0, c = 0; x != 0, c = y
+  int d = (z ^ a) & z; // x == 0, d = z; x != 0, d = 0
+  return c | d;
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -232,7 +242,13 @@ int conditional(int x, int y, int z)
  */
 int isLessOrEqual(int x, int y)
 {
-  return 2;
+  int x_neg = x >> 31;
+  int y_neg = y >> 31;
+  int sign_compare = x_neg ^ y_neg;
+  int overflow_res = !y_neg;
+  int y_x = y + (~x + 1); // y-x
+  int nooverflow_res = !(y_x >> 31);
+  return (sign_compare & overflow_res) | ((!sign_compare) & nooverflow_res);
 }
 //4
 /* 
@@ -245,7 +261,7 @@ int isLessOrEqual(int x, int y)
  */
 int logicalNeg(int x)
 {
-  return 2;
+  return ((x | (~x + 1)) >> 31) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -261,7 +277,23 @@ int logicalNeg(int x)
  */
 int howManyBits(int x)
 {
-  return 0;
+  int b16, b8, b4, b2, b1, b0;
+  int sign = x >> 31;
+  x = (sign & ~x) | (~sign & x); //如果x为正则不变，否则按位取反（这样好找最高位为1的，原来是最高位为0的，这样也将符号位去掉了）
+
+  // 不断缩小范围
+  b16 = !!(x >> 16) << 4; //高十六位是否有1
+  x = x >> b16;           //如果有（至少需要16位），则将原数右移16位
+  b8 = !!(x >> 8) << 3;   //剩余位高8位是否有1
+  x = x >> b8;            //如果有（至少需要16+8=24位），则右移8位
+  b4 = !!(x >> 4) << 2;   //同理
+  x = x >> b4;
+  b2 = !!(x >> 2) << 1;
+  x = x >> b2;
+  b1 = !!(x >> 1);
+  x = x >> b1;
+  b0 = x;
+  return b16 + b8 + b4 + b2 + b1 + b0 + 1; //+1表示加上符号位
 }
 //float
 /* 
@@ -277,7 +309,27 @@ int howManyBits(int x)
  */
 unsigned floatScale2(unsigned uf)
 {
-  return 2;
+  int sign = uf >> 31;
+  int exp = (uf >> 23) & (0xFF);
+  int frac = uf & (0x7FFFFF);
+  if (exp == 0xFF)
+  {
+    return uf;
+  }
+  if (exp == 0)
+  {
+    frac = frac << 1;
+  }
+  else if (exp == 0xFE)
+  {
+    frac = 0;
+    exp += 1;
+  }
+  else
+  {
+    exp += 1;
+  }
+  return frac | (sign << 31) | (exp << 23);
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -293,7 +345,30 @@ unsigned floatScale2(unsigned uf)
  */
 int floatFloat2Int(unsigned uf)
 {
-  return 2;
+  int sign = uf >> 31;
+  int exp = (uf >> 23) & (0xFF);
+  int frac = uf & (0x7FFFFF);
+  const int bias = 127;
+  int realExp = exp - bias;
+  int realSign = ((sign - 0.5) * (-2));
+  if (realExp >= 31) // 2^31
+  {
+    return 0x80000000u;
+  }
+  else if (realExp >= 23)
+  {
+    frac = frac << (realExp - 23);
+    return (frac + (1 << realExp)) * realSign;
+  }
+  else if (realExp >= 0)
+  {
+    frac = frac >> (23 - realExp);
+    return (frac + (1 << realExp)) * realSign;
+  }
+  else
+  {
+    return 0;
+  }
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -310,5 +385,25 @@ int floatFloat2Int(unsigned uf)
  */
 unsigned floatPower2(int x)
 {
-  return 2;
+  const unsigned inf = 0x7F800000;
+  int exp = 0;
+  int frac = 0;
+  if (x > 127)
+  {
+    return inf;
+  }
+  else if (x < -149)
+  {
+    return 0;
+  }
+  else if (x < -126)
+  {
+    frac = 1 << (23 - (-126 - x));
+    return frac | exp;
+  }
+  else if (x <= 127)
+  {
+    int realExp = x + 127;
+    return frac | (realExp << 23);
+  }
 }
