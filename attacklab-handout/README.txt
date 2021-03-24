@@ -26,3 +26,9 @@ can compile (use flag -Og) and disassemble it to look for gadgets.
 Utility program to generate byte sequences.  See documentation in lab
 handout.
 
+
+
+Solutions: 
+./hex2raw < input/c1.txt | ./ctarget -q
+./hex2raw < input/c2.txt | ./ctarget -q
+./hex2raw < input/c3.txt | ./ctarget -q
