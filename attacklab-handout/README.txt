@@ -32,3 +32,5 @@ Solutions:
 ./hex2raw < input/c1.txt | ./ctarget -q
 ./hex2raw < input/c2.txt | ./ctarget -q
 ./hex2raw < input/c3.txt | ./ctarget -q
+
+./hex2raw < input/r1.txt | ./rtarget -q
