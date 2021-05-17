@@ -37,4 +37,4 @@ This lab is the **most difficut** lab among all labs which I met in CSAPP. And t
   - When thinking hits a bottleneck, it's better to seek help in time than to get stuck in place.
 - Cache
   - process by rows (or by cols based on the internal store direction)
-  - batch update (read a sequence into a Cache block, access within this block; then go for the next block)
+  - [block update](http://csapp.cs.cmu.edu/2e/waside/waside-blocking.pdf) (read a sequence into a Cache block, access within this block; then go for the next block)
