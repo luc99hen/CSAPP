@@ -2,6 +2,7 @@
     "files.associations": {
         "types.h": "c",
         "signal.h": "c",
-        "cstdlib": "cpp"
+        "cstdlib": "cpp",
+        "memlib.h": "c"
     }
 }
