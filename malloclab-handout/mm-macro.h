@@ -11,7 +11,10 @@
 #define PUT(p, val) (*(unsigned int *)(p) = (val))
 
 #define GET_SIZE(p) (GET(p) & ~0x7)
-#define GET_ALLOC(p) (GET(p) & 1)
+#define GET_ALLOC(p) (GET(p) & 0x1)
+#define GET_PRE_ALLOC(p) (GET(p) & 0x2)
+#define GET_FLAGS(p) (GET(p) & 0x7)
+
 
 /* Given block ptr bp, compute addr of its header and footer */
 #define HDRP(bp) ((char*)(bp) - WSIZE)
@@ -30,4 +33,15 @@
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-#define MIN_BLOCK_SIZE 2*DSIZE
+#define MIN_BLOCK_SIZE DSIZE
+
+#define FREE        0x0
+#define ALLOC       0x1
+#define FREE_FREE   0x0
+#define FREE_ALLOC  0x1
+#define ALLOC_FREE  0x2
+#define ALLOC_ALLOC 0x3
+#define SET_FREE(v) (v & ~0x1)
+#define SET_ALLOC(v) (v | 0x1)
+
+#define IS_DEBUG    0

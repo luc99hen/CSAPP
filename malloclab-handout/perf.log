@@ -1,6 +1,11 @@
 - naive
 
-- implicit data block list
+- implicit block list (IBL)
 -- first_fit: 44 (util) + 16 (thru) = 60/100
 -- best_fit:  45 (util) + 17 (thru) = 62/100
 -- next_fit:  43 (util) + 40 (thru) = 83/100
+
+- enhanced IBL (allocated block emit footer)
+-- first_fit: 44 (util) + 18 (thru) = 62/100
+-- best_fit:  45 (util) + 16 (thru) = 61/100
+-- next_fit:  42 (util) + 40 (thru) = 82/100
