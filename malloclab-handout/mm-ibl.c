@@ -17,7 +17,7 @@
 
 #include "mm-macro.h"
 static void* first_block;
-static const char* fit_strategy = "first";
+static const char* fit_strategy = "next";
 
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
@@ -35,12 +35,6 @@ team_t team = {
     /* Second member's email address (leave blank if none) */
     ""
 };
-
-static void panic(char* err_msg){
-    printf(err_msg);
-    fflush(stdout);
-    while(1){}
-}
 
 // print out the whole list to debug
 static void print_list() {
@@ -67,10 +61,10 @@ static int mm_check() {
             printf("mm_check fail: block escape coalescing\n");
             return 0;
         }
-        // if (pre_alloc != (GET_PRE_ALLOC(HDRP(cur_block)) >> 1)){
-        //     printf("mm_check fail: incosistent prealloc state\n");
-        //     return 0;
-        // }
+        if (pre_alloc != (GET_PRE_ALLOC(HDRP(cur_block)) >> 1)){
+            printf("mm_check fail: incosistent prealloc state\n");
+            return 0;
+        }
         if (block_size % ALIGNMENT > 0 || (long)cur_block % ALIGNMENT > 0){
             printf("mm_check fail: alignment\n");
             return 0;
@@ -93,14 +87,12 @@ static int mm_check() {
 
 static void* first_fit(size_t size){
     size_t block_size;
-    char* cur_block = NEXT_FREE_BLK(first_block);
+    char* cur_block = first_block;
 
-    while(cur_block && (block_size = GET_SIZE(HDRP(cur_block))) > 0){
-        if(GET_ALLOC(HDRP(cur_block)))
-            panic("first_fit error: allocated block in free block list");
-        if(block_size >= size)
+    while((block_size = GET_SIZE(HDRP(cur_block))) > 0){
+        if(!GET_ALLOC(HDRP(cur_block)) && block_size >= size)
             return cur_block;
-        cur_block = NEXT_FREE_BLK(cur_block);
+        cur_block = NEXT_BLK(cur_block);
     }
     return NULL;
 }
@@ -164,48 +156,25 @@ static void* find_fit(size_t size){
 }
 
 /*
- * delete_block - delete a block in a double linked list
- */
-static void delete_block(void* bp){
-    if (GET_ALLOC(HDRP(bp))) {
-        panic("delete_block error: shouldn't delete an allocated block");
-    }
-    PUT(NEXT_PTR(PREV_FREE_BLK(bp)), NEXT_FREE_BLK(bp));
-    if (NEXT_FREE_BLK(bp))
-        PUT(PREV_PTR(NEXT_FREE_BLK(bp)), PREV_FREE_BLK(bp));
-}
-
-
-/*
- * add_block - add a block to a double linked list
- * strategy 1: LIFO, add this block to the head of the linked list
- */
-static void add_block(void* bp){
-    PUT(PREV_PTR(bp), first_block);
-    PUT(NEXT_PTR(bp), NEXT_FREE_BLK(first_block));
-    PUT(NEXT_PTR(first_block), bp);
-    if (NEXT_FREE_BLK(bp))
-        PUT(PREV_PTR(NEXT_FREE_BLK(bp)), bp);
-}
-
-/*
  * place - mark a free block as used (split if necessary)
  */
-static void place(void* bp, size_t size, int allocated){
+static void place(void* bp, size_t size){
     size_t block_size = GET_SIZE(HDRP(bp));
+    int block_flags = GET_FLAGS(HDRP(bp));
 
-    if (!allocated)
-        delete_block(bp);
     // if size of the left part is small enough, leave it as internal fragment
     if (block_size - size < MIN_BLOCK_SIZE){
-        PUT(HDRP(bp), PACK(block_size, ALLOC));
-        PUT(FTRP(bp), PACK(block_size, ALLOC));  // don't need footer for allocated block
+        PUT(HDRP(bp), PACK(block_size, SET_ALLOC(block_flags)));
+        // PUT(FTRP(bp), PACK(block_size, 1));  // don't need footer for allocated block
+        int next_header = GET(HDRP(NEXT_BLK(bp))) | 0x2;
+        PUT(HDRP(NEXT_BLK(bp)), next_header);
+        if (!(next_header & 0x1))  // if this next_block is free, set footer
+            PUT(FTRP(NEXT_BLK(bp)), next_header);
     } else { // split this block into two
-        PUT(HDRP(bp), PACK(size, ALLOC));
-        PUT(FTRP(bp), PACK(size, ALLOC));
-        PUT(HDRP(NEXT_BLK(bp)), PACK(block_size-size, FREE));
-        PUT(FTRP(NEXT_BLK(bp)), PACK(block_size-size, FREE));
-        add_block(NEXT_BLK(bp));
+        PUT(HDRP(bp), PACK(size, SET_ALLOC(block_flags)));
+        // PUT(FTRP(bp), PACK(size, 1));
+        PUT(HDRP(NEXT_BLK(bp)), PACK(block_size-size, ALLOC_FREE));
+        PUT(FTRP(NEXT_BLK(bp)), PACK(block_size-size, ALLOC_FREE));
     }   
 
     if(IS_DEBUG && !mm_check())
@@ -217,31 +186,37 @@ static void place(void* bp, size_t size, int allocated){
  * coalesce - coalesce previous or next free block
  */
 static void *coalesce(void* bp){
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLK(bp)));
+    size_t prev_alloc = GET_PRE_ALLOC(HDRP(bp));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLK(bp)));
     size_t size = GET_SIZE(HDRP(bp));
+    int flags;
     void* res;
 
     if (prev_alloc && next_alloc) {
         res = bp;
-        add_block(bp);
     } else if (prev_alloc && !next_alloc) {
         size += GET_SIZE(HDRP(NEXT_BLK(bp)));
-        delete_block(NEXT_BLK(bp));
-        add_block(bp);
-        PUT(HDRP(bp), PACK(size, 0));
-        PUT(FTRP(bp), PACK(size, 0));
+        if(NEXT_BLK(bp) == next_fit_block && !strcmp(fit_strategy, "next"))
+            next_fit_block = bp;
+        flags = GET_FLAGS(HDRP(bp));
+        PUT(HDRP(bp), PACK(size, SET_FREE(flags)));
+        PUT(FTRP(bp), PACK(size, SET_FREE(flags)));
         res = bp;
     } else if (!prev_alloc && next_alloc) {
         size += GET_SIZE(HDRP(PREV_BLK(bp)));
-        PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(PREV_BLK(bp)), PACK(size, 0));
+        if(bp == next_fit_block && !strcmp(fit_strategy, "next"))    
+            next_fit_block = PREV_BLK(bp);
+        flags = GET_FLAGS(HDRP(PREV_BLK(bp)));
+        PUT(FTRP(bp), PACK(size, SET_FREE(flags)));
+        PUT(HDRP(PREV_BLK(bp)), PACK(size, SET_FREE(flags)));
         res = PREV_BLK(bp);
     } else {
         size = size + GET_SIZE(HDRP(PREV_BLK(bp))) + GET_SIZE(HDRP(NEXT_BLK(bp)));
-        delete_block(NEXT_BLK(bp));
-        PUT(HDRP(PREV_BLK(bp)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLK(bp)), PACK(size, 0));
+        if((bp == next_fit_block || NEXT_BLK(bp) == next_fit_block) && !strcmp(fit_strategy, "next"))
+            next_fit_block = PREV_BLK(bp);
+        flags = GET_FLAGS(HDRP(PREV_BLK(bp)));
+        PUT(HDRP(PREV_BLK(bp)), PACK(size, SET_FREE(flags)));
+        PUT(FTRP(NEXT_BLK(bp)), PACK(size, SET_FREE(flags)));
         res = PREV_BLK(bp);
     }
 
@@ -256,20 +231,20 @@ static void *coalesce(void* bp){
  * additional space to a free block
  */
 static void *extend_heap(size_t words){
-    char* addr;
+    char* bp;
     size_t size;
 
     size = (words % 2) ? (words + 1)*WSIZE : words*WSIZE;
-    if ((long)(addr = mem_sbrk(size)) == -1)
+    if ((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
-
-    // get the real block pointer addr from allocated mem addr
-    char* bp = addr;
+    
+    // get previous last block's state from epilogue flag
+    int prev_alloc = GET_PRE_ALLOC(HDRP(bp));
 
     // initialize the new free block
-    PUT(HDRP(bp), PACK(size, FREE));
-    PUT(FTRP(bp), PACK(size, FREE));
-    PUT(HDRP(NEXT_BLK(bp)), PACK(0, ALLOC));
+    PUT(HDRP(bp), PACK(size, prev_alloc));
+    PUT(FTRP(bp), PACK(size, prev_alloc));
+    PUT(HDRP(NEXT_BLK(bp)), PACK(0, FREE_ALLOC));
 
     // coalesce if previous block is free
     return coalesce(bp);
@@ -281,16 +256,14 @@ static void *extend_heap(size_t words){
 int mm_init(void)
 {
     /* initialize a implicit block linklist data structure */
-    first_block = mem_sbrk(6*WSIZE);
+    first_block = mem_sbrk(4*WSIZE);
     if(first_block == (void*)-1)
         return -1;
     
     PUT(first_block, 0);     // Alignment with epilogue header
-    PUT(first_block + (1*WSIZE), PACK(2*DSIZE, ALLOC));  // Prologue header
-    PUT(first_block + (2*WSIZE), NULL);                  // Prologue pred ptr
-    PUT(first_block + (3*WSIZE), NULL);                  // Prologue next ptr (point to epilogue)
-    PUT(first_block + (4*WSIZE), PACK(2*DSIZE, ALLOC));  // Prologue footer
-    PUT(first_block + (5*WSIZE), PACK(0, ALLOC));        // Epilogue header
+    PUT(first_block + (1*WSIZE), PACK(DSIZE, FREE_ALLOC));  // Prologue header
+    PUT(first_block + (2*WSIZE), PACK(DSIZE, FREE_ALLOC));  // Prologue footer
+    PUT(first_block + (3*WSIZE), PACK(0, ALLOC_ALLOC));     // Epilogue header
     first_block += (2*WSIZE);
 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -300,10 +273,10 @@ int mm_init(void)
 
 // adjust size for alignment and metadata overhead
 size_t adjust_size(size_t size){
-    if (size <= DSIZE)
+    if (size <= WSIZE)
         return MIN_BLOCK_SIZE;
     else
-        return DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
+        return DSIZE * ((size + WSIZE + (DSIZE - 1)) / DSIZE);
 }
 
 /* 
@@ -326,18 +299,24 @@ void *mm_malloc(size_t size)
             return NULL;
     }
 
-    place(bp, new_size, 0);
+    place(bp, new_size);
     return bp;
+
 }
 
 /*
- * mm_free - Freeing a block
+ * mm_free - Freeing a block does nothing.
  */
 void mm_free(void *ptr)
 {
     size_t size = GET_SIZE(HDRP(ptr));
-    PUT(HDRP(ptr), PACK(size, FREE));
-    PUT(FTRP(ptr), PACK(size, FREE));
+    int flags = GET_FLAGS(HDRP(ptr));
+    PUT(HDRP(ptr), PACK(size, SET_FREE(flags)));
+    PUT(FTRP(ptr), PACK(size, SET_FREE(flags)));
+    int next_header = GET(HDRP(NEXT_BLK(ptr))) & ~0x2;
+    PUT(HDRP(NEXT_BLK(ptr)), next_header);
+    if (!(next_header & 0x1))  // if this next_block is free, set footer
+        PUT(FTRP(NEXT_BLK(ptr)), next_header);
     coalesce(ptr);
 }
 
@@ -353,20 +332,32 @@ void *mm_realloc(void *ptr, size_t size)
         return mm_malloc(size);
     } 
 
-    size_t old_size = GET_SIZE(HDRP(ptr));
-    size_t new_size = adjust_size(size);
+    size_t old_size = GET_SIZE(HDRP(ptr)) - WSIZE;
 
-    if (new_size <= old_size) {
-        place(ptr, new_size, 1);
+    if (size <= old_size) {
+        place(ptr, size);
         return ptr;
     } else {
         void* new_ptr;
         if ((new_ptr= mm_malloc(size)) == NULL){
             return NULL;
         }
-        memcpy(new_ptr, ptr, old_size - DSIZE);
+        memcpy(new_ptr, ptr, old_size);
         mm_free(ptr);
         return new_ptr;
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 

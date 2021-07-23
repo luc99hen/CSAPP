@@ -24,6 +24,13 @@
 #define NEXT_BLK(bp) ((char*)(bp) + GET_SIZE((char *)(bp) - WSIZE))
 #define PREV_BLK(bp) ((char*)(bp) - GET_SIZE((char *)(bp) - DSIZE))
 
+/* (Explicit) Given block ptr bp, compute addr of the next and previous free blocks */
+#define NEXT_FREE_BLK(bp) GET((char*)bp + WSIZE)
+#define PREV_FREE_BLK(bp) GET(bp)
+#define PREV_PTR(bp) bp
+#define NEXT_PTR(bp) ((char*)bp + WSIZE)
+
+
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -33,7 +40,7 @@
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
-#define MIN_BLOCK_SIZE DSIZE
+#define MIN_BLOCK_SIZE DSIZE*2
 
 #define FREE        0x0
 #define ALLOC       0x1

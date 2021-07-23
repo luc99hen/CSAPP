@@ -9,3 +9,6 @@
 -- first_fit: 44 (util) + 18 (thru) = 62/100
 -- best_fit:  45 (util) + 16 (thru) = 61/100
 -- next_fit:  42 (util) + 40 (thru) = 82/100
+
+- explicit free block list
+-- first_fit: 42 (util) + 40 (thru) = 82/100
