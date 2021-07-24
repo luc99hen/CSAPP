@@ -12,3 +12,6 @@
 
 - explicit free block list
 -- first_fit: 42 (util) + 40 (thru) = 82/100
+-- best_fit:  45 (util) + 40 (thru) = 85/100
+-- next_fit:  43 (util) + 40 (thru) = 83/100
+
