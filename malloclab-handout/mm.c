@@ -17,7 +17,7 @@
 
 #include "mm-macro.h"
 static void* first_block;
-static const char* fit_strategy = "next";
+static const char* fit_strategy = "best";
 
 /*********************************************************
  * NOTE TO STUDENTS: Before you do anything else, please
@@ -182,13 +182,31 @@ static void delete_block(void* bp){
 /*
  * add_block - add a block to a double linked list
  * strategy 1: LIFO, add this block to the head of the linked list
+ * strategu 2: arrange the list in the addr order
  */
 static void add_block(void* bp){
-    PUT(PREV_PTR(bp), first_block);
-    PUT(NEXT_PTR(bp), NEXT_FREE_BLK(first_block));
-    PUT(NEXT_PTR(first_block), bp);
-    if (NEXT_FREE_BLK(bp))
-        PUT(PREV_PTR(NEXT_FREE_BLK(bp)), bp);
+    void* cur_block = first_block;
+    void* prev_block;
+    void* next_block;
+
+    // find the proper position to insert this block
+    while (cur_block < bp && NEXT_FREE_BLK(cur_block) != NULL) {
+        cur_block = NEXT_FREE_BLK(cur_block);
+    }
+    
+    if (NEXT_FREE_BLK(cur_block) != NULL) {
+        prev_block = PREV_FREE_BLK(cur_block);
+        next_block = cur_block;
+    } else { // bp should be the last item in the list
+        prev_block = cur_block;
+        next_block = NULL;
+    }
+    
+    PUT(PREV_PTR(bp), prev_block);
+    PUT(NEXT_PTR(bp), next_block);
+    PUT(NEXT_PTR(prev_block), bp);
+    if (next_block)
+        PUT(PREV_PTR(next_block), bp);
 }
 
 /*

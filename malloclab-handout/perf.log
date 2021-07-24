@@ -10,8 +10,12 @@
 -- best_fit:  45 (util) + 16 (thru) = 61/100
 -- next_fit:  42 (util) + 40 (thru) = 82/100
 
-- explicit free block list
+- explicit free block list (LIFO)
 -- first_fit: 42 (util) + 40 (thru) = 82/100
 -- best_fit:  45 (util) + 40 (thru) = 85/100
 -- next_fit:  43 (util) + 40 (thru) = 83/100
+
+- explicit free block list (addr order)
+-- first_fit: 44 (util) + 35 (thru) = 79/100
+-- best_fit:  45 (util) + 35 (thru) = 80/100
 
