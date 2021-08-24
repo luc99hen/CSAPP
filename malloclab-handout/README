@@ -50,3 +50,14 @@ To get a list of the driver flags:
 
 	unix> mdriver -h
 
+*******************************
+My Solutions
+*******************************
+In this lab, I have tried 3 different classes of methods:
+- implicit block list (different fit strategies, enhancement with footer emited)
+- explicit block list (different fit strategies, different link list order arrangements)
+- segregated block list fit (different list num settings)
+
+Also, I use some optimization techniques to improve the implementation:
+- better realloc strategy, try merge prev or next free block to avoid reallocation
+- avoid init trap, use small init block size to avoid large blank block waste (https://zero4drift.github.io/posts/csapp-malloclab-jie-ti-si-lu-ji-lu/#%E5%88%86%E6%9E%90-trace-%E6%96%87%E4%BB%B6)

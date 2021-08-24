@@ -12,7 +12,7 @@
 
 - explicit free block list (LIFO)
 -- first_fit: 42 (util) + 40 (thru) = 82/100
--- best_fit:  45 (util) + 40 (thru) = 85/100
+-- best_fit:  45 (util) + 40 (thru) = 85/100  (86 enhanced realloc, 88 avoid init trap)
 -- next_fit:  43 (util) + 40 (thru) = 83/100
 
 - explicit free block list (addr order)
