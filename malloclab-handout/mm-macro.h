@@ -52,3 +52,5 @@
 #define SET_ALLOC(v) (v | 0x1)
 
 #define IS_DEBUG    0
+
+#define LIST_NUM    3
