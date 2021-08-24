@@ -255,6 +255,44 @@ void mm_free(void *ptr)
     coalesce(ptr);
 }
 
+static void *realloc_coalesce(void* bp, size_t new_size){
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLK(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLK(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
+    void* res;
+
+    if (prev_alloc && next_alloc) {
+        res = NULL;
+    } else if (prev_alloc && !next_alloc) {        
+        size += GET_SIZE(HDRP(NEXT_BLK(bp)));
+        if (size >= new_size) {
+            delete_block(NEXT_BLK(bp));
+            PUT(HDRP(bp), PACK(size, 0));
+            PUT(FTRP(bp), PACK(size, 0));
+            res = bp;
+        }        
+    } else if (!prev_alloc && next_alloc) {       
+        size += GET_SIZE(HDRP(PREV_BLK(bp)));
+        if (size >= new_size) {
+            PUT(FTRP(bp), PACK(size, 0));
+            PUT(HDRP(PREV_BLK(bp)), PACK(size, 0));
+            delete_block(PREV_BLK(bp));
+            res = PREV_BLK(bp);
+        }        
+    } else {
+        size = size + GET_SIZE(HDRP(PREV_BLK(bp))) + GET_SIZE(HDRP(NEXT_BLK(bp)));
+        if (size >= new_size) {
+            PUT(HDRP(PREV_BLK(bp)), PACK(size, 0));
+            PUT(FTRP(NEXT_BLK(bp)), PACK(size, 0));
+            delete_block(PREV_BLK(bp));
+            delete_block(NEXT_BLK(bp));
+            res = PREV_BLK(bp);
+        }        
+    }
+
+    return res;
+}
+
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
@@ -269,18 +307,23 @@ void *mm_realloc(void *ptr, size_t size)
 
     size_t old_size = GET_SIZE(HDRP(ptr));
     size_t new_size = adjust_size(size);
+    void* new_ptr = ptr;
 
     if (new_size <= old_size) {
-        place(ptr, new_size, 1);
-        return ptr;
-    } else {
-        void* new_ptr;
+        place(new_ptr, new_size, 1);
+    } else if ((new_ptr = realloc_coalesce(ptr, new_size)) != NULL) {
+        if (new_ptr != ptr) 
+            memcpy(new_ptr, ptr, old_size - DSIZE);
+        place(new_ptr, new_size, 1);
+    }
+    else {
         if ((new_ptr= mm_malloc(size)) == NULL){
             return NULL;
         }
         memcpy(new_ptr, ptr, old_size - DSIZE);
         mm_free(ptr);
-        return new_ptr;
     }
+
+    return new_ptr;
 }
 
