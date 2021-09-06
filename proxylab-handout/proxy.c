@@ -1,19 +1,22 @@
 #include <stdio.h>
 #include "csapp.h"
+#include "thread.h"
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
 
-void clienterror(int fd, char *cause, char *errnum, 
-		 char *shortmsg, char *longmsg);
-int parseURI(const char*, char*, char*, char*, char*);
-void split_header(char* buf, char* name, char* content);
-int is_valid_header(char* buf);
-void doit(int);
+void    sigpipe_handler(int sig);
+void    clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+int     parseURI(const char*, char*, char*, char*, char*);
+void    split_header(char* buf, char* name, char* content);
+int     is_valid_header(char* buf);
+void*   thread(void* vargp);
+void    doit(int);
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3";
+sbuf_t sbuf;
 
 int main(int argc, char** argv)
 {
@@ -21,6 +24,7 @@ int main(int argc, char** argv)
     char clientname[MAXLINE], clientport[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
+    pthread_t tid;
 
     // check cmd line args
     if (argc != 2) {
@@ -28,18 +32,44 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-    listenfd = Open_listenfd(argv[1]);      // #todo fix unix_error exit
+    // handler broken pipe properly
+    Signal(SIGPIPE, sigpipe_handler);
+    listenfd = Open_listenfd(argv[1]);
+
+    // init thread pool
+    sbuf_init(&sbuf, SBUFSIZE);
+    for (int i = 0; i < NTHREADS; i++) {
+        Pthread_create(&tid, NULL, thread, NULL);
+        thread_fds[i].tid = tid;
+    }
+        
     while (1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA*)&clientaddr, &clientlen);
 
         // log
         Getnameinfo((SA*)&clientaddr, clientlen, clientname, MAXLINE, clientport, MAXLINE, 0);
-        printf("Proxy accepted conn from (%s %s)\n", clientname, clientport); 
+        printf("Proxy accepted conn from (%s %s)", clientname, clientport); 
 
-        doit(connfd);
-        Close(connfd);
+        sbuf_insert(&sbuf, connfd);
     }
+}
+
+void* thread(void* vargp)
+{
+    pthread_t tid = Pthread_self();
+    Pthread_detach(tid);
+    while (1) {
+        printf("thread id: %ld\n", tid);
+        int client_fd = sbuf_remove(&sbuf);
+        doit(client_fd);
+        free_fd();
+    }
+}
+
+void sigpipe_handler(int sig) 
+{
+    fprintf(stderr, "%s", "\nWrite to closed conn socket.\n");
 }
 
 /*
@@ -51,6 +81,7 @@ void doit(int client_fd)
 
     rio_t rio_c, rio_s;
     Rio_readinitb(&rio_c, client_fd);
+    set_fd(client_fd, 1);
 
     // check request format
     if (Rio_readlineb(&rio_c, buf, MAXLINE) == 0) {
@@ -72,10 +103,11 @@ void doit(int client_fd)
     }
     int server_fd = Open_clientfd(hostname, port);  
     Rio_readinitb(&rio_s, server_fd);
+    set_fd(server_fd, 0);
     
     // write new header to socket
     sprintf(buf, "%s %s %s\r\n", method, path, "HTTP/1.0");
-    printf("New request header:\n%s", buf);
+    printf("######## New Request ######## \n%s", buf);
     Rio_writen(server_fd, buf, strlen(buf));
     while (1) {
         Rio_readlineb(&rio_c, buf, MAXLINE);      
@@ -120,7 +152,6 @@ void doit(int client_fd)
             Rio_writen(client_fd, buf, n);
         }
     }
-    Close(server_fd);
 
 }
 
